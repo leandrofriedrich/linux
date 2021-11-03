@@ -60,7 +60,6 @@
 	vqmmc-supply = <&pm8226_l21>;
 };
 
-
 &rpm_requests {
 	pm8226-regulators {
 		compatible = "qcom,rpm-pm8226-regulators";
@@ -207,6 +206,28 @@
 		pm8226_l28: l28 {
 			regulator-min-microvolt = <2000000>;
 			regulator-max-microvolt = <3000000>;
+		};
+	};
+};
+
+&tlmm {
+	touch_pins: touch {
+		irq {
+			pins = "gpio17";
+			function = "gpio";
+
+			drive-strength = <8>;
+			bias-pull-down;
+			input-enable;
+		};
+
+		reset {
+			pins = "gpio16";
+			function = "gpio";
+
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
 		};
 	};
 };
