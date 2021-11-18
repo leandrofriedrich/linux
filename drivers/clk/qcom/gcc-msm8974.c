@@ -2325,121 +2325,6 @@ static struct gdsc usb_hs_hsic_gdsc = {
 	.pwrsts = PWRSTS_OFF_ON,
 };
 
-static struct clk_regmap *gcc_msm8226_clocks[] = {
-	[GPLL0] = &gpll0.clkr,
-	[GPLL0_VOTE] = &gpll0_vote,
-	[GPLL1] = &gpll1.clkr,
-	[GPLL1_VOTE] = &gpll1_vote,
-	[CONFIG_NOC_CLK_SRC] = &config_noc_clk_src.clkr,
-	[PERIPH_NOC_CLK_SRC] = &periph_noc_clk_src.clkr,
-	[SYSTEM_NOC_CLK_SRC] = &system_noc_clk_src.clkr,
-	[BLSP1_QUP1_I2C_APPS_CLK_SRC] = &blsp1_qup1_i2c_apps_clk_src.clkr,
-	[BLSP1_QUP1_SPI_APPS_CLK_SRC] = &blsp1_qup1_spi_apps_clk_src.clkr,
-	[BLSP1_QUP2_I2C_APPS_CLK_SRC] = &blsp1_qup2_i2c_apps_clk_src.clkr,
-	[BLSP1_QUP2_SPI_APPS_CLK_SRC] = &blsp1_qup2_spi_apps_clk_src.clkr,
-	[BLSP1_QUP3_I2C_APPS_CLK_SRC] = &blsp1_qup3_i2c_apps_clk_src.clkr,
-	[BLSP1_QUP3_SPI_APPS_CLK_SRC] = &blsp1_qup3_spi_apps_clk_src.clkr,
-	[BLSP1_QUP4_I2C_APPS_CLK_SRC] = &blsp1_qup4_i2c_apps_clk_src.clkr,
-	[BLSP1_QUP4_SPI_APPS_CLK_SRC] = &blsp1_qup4_spi_apps_clk_src.clkr,
-	[BLSP1_QUP5_I2C_APPS_CLK_SRC] = &blsp1_qup5_i2c_apps_clk_src.clkr,
-	[BLSP1_QUP5_SPI_APPS_CLK_SRC] = &blsp1_qup5_spi_apps_clk_src.clkr,
-	[BLSP1_QUP6_I2C_APPS_CLK_SRC] = &blsp1_qup6_i2c_apps_clk_src.clkr,
-	[BLSP1_QUP6_SPI_APPS_CLK_SRC] = &blsp1_qup6_spi_apps_clk_src.clkr,
-	[BLSP1_UART1_APPS_CLK_SRC] = &blsp1_uart1_apps_clk_src.clkr,
-	[BLSP1_UART2_APPS_CLK_SRC] = &blsp1_uart2_apps_clk_src.clkr,
-	[BLSP1_UART3_APPS_CLK_SRC] = &blsp1_uart3_apps_clk_src.clkr,
-	[BLSP1_UART4_APPS_CLK_SRC] = &blsp1_uart4_apps_clk_src.clkr,
-	[BLSP1_UART5_APPS_CLK_SRC] = &blsp1_uart5_apps_clk_src.clkr,
-	[BLSP1_UART6_APPS_CLK_SRC] = &blsp1_uart6_apps_clk_src.clkr,
-	[CE1_CLK_SRC] = &ce1_clk_src.clkr,
-	[GP1_CLK_SRC] = &gp1_clk_src.clkr,
-	[GP2_CLK_SRC] = &gp2_clk_src.clkr,
-	[GP3_CLK_SRC] = &gp3_clk_src.clkr,
-	[PDM2_CLK_SRC] = &pdm2_clk_src.clkr,
-	[SDCC1_APPS_CLK_SRC] = &sdcc1_apps_clk_src.clkr,
-	[SDCC2_APPS_CLK_SRC] = &sdcc2_apps_clk_src.clkr,
-	[SDCC3_APPS_CLK_SRC] = &sdcc3_apps_clk_src.clkr,
-	[USB_HS_SYSTEM_CLK_SRC] = &usb_hs_system_clk_src.clkr,
-	[USB_HSIC_CLK_SRC] = &usb_hsic_clk_src.clkr,
-	[USB_HSIC_IO_CAL_CLK_SRC] = &usb_hsic_io_cal_clk_src.clkr,
-	[USB_HSIC_SYSTEM_CLK_SRC] = &usb_hsic_system_clk_src.clkr,
-	[GCC_BAM_DMA_AHB_CLK] = &gcc_bam_dma_ahb_clk.clkr,
-	[GCC_BLSP1_AHB_CLK] = &gcc_blsp1_ahb_clk.clkr,
-	[GCC_BLSP1_QUP1_I2C_APPS_CLK] = &gcc_blsp1_qup1_i2c_apps_clk.clkr,
-	[GCC_BLSP1_QUP1_SPI_APPS_CLK] = &gcc_blsp1_qup1_spi_apps_clk.clkr,
-	[GCC_BLSP1_QUP2_I2C_APPS_CLK] = &gcc_blsp1_qup2_i2c_apps_clk.clkr,
-	[GCC_BLSP1_QUP2_SPI_APPS_CLK] = &gcc_blsp1_qup2_spi_apps_clk.clkr,
-	[GCC_BLSP1_QUP3_I2C_APPS_CLK] = &gcc_blsp1_qup3_i2c_apps_clk.clkr,
-	[GCC_BLSP1_QUP3_SPI_APPS_CLK] = &gcc_blsp1_qup3_spi_apps_clk.clkr,
-	[GCC_BLSP1_QUP4_I2C_APPS_CLK] = &gcc_blsp1_qup4_i2c_apps_clk.clkr,
-	[GCC_BLSP1_QUP4_SPI_APPS_CLK] = &gcc_blsp1_qup4_spi_apps_clk.clkr,
-	[GCC_BLSP1_QUP5_I2C_APPS_CLK] = &gcc_blsp1_qup5_i2c_apps_clk.clkr,
-	[GCC_BLSP1_QUP5_SPI_APPS_CLK] = &gcc_blsp1_qup5_spi_apps_clk.clkr,
-	[GCC_BLSP1_QUP6_I2C_APPS_CLK] = &gcc_blsp1_qup6_i2c_apps_clk.clkr,
-	[GCC_BLSP1_QUP6_SPI_APPS_CLK] = &gcc_blsp1_qup6_spi_apps_clk.clkr,
-	[GCC_BLSP1_UART1_APPS_CLK] = &gcc_blsp1_uart1_apps_clk.clkr,
-	[GCC_BLSP1_UART2_APPS_CLK] = &gcc_blsp1_uart2_apps_clk.clkr,
-	[GCC_BLSP1_UART3_APPS_CLK] = &gcc_blsp1_uart3_apps_clk.clkr,
-	[GCC_BLSP1_UART4_APPS_CLK] = &gcc_blsp1_uart4_apps_clk.clkr,
-	[GCC_BLSP1_UART5_APPS_CLK] = &gcc_blsp1_uart5_apps_clk.clkr,
-	[GCC_BLSP1_UART6_APPS_CLK] = &gcc_blsp1_uart6_apps_clk.clkr,
-	[GCC_BOOT_ROM_AHB_CLK] = &gcc_boot_rom_ahb_clk.clkr,
-	[GCC_CE1_AHB_CLK] = &gcc_ce1_ahb_clk.clkr,
-	[GCC_CE1_AXI_CLK] = &gcc_ce1_axi_clk.clkr,
-	[GCC_CE1_CLK] = &gcc_ce1_clk.clkr,
-	[GCC_GP1_CLK] = &gcc_gp1_clk.clkr,
-	[GCC_GP2_CLK] = &gcc_gp2_clk.clkr,
-	[GCC_GP3_CLK] = &gcc_gp3_clk.clkr,
-	[GCC_LPASS_Q6_AXI_CLK] = &gcc_lpass_q6_axi_clk.clkr,
-	[GCC_MSS_CFG_AHB_CLK] = &gcc_mss_cfg_ahb_clk.clkr,
-	[GCC_MSS_Q6_BIMC_AXI_CLK] = &gcc_mss_q6_bimc_axi_clk.clkr,
-	[GCC_PDM2_CLK] = &gcc_pdm2_clk.clkr,
-	[GCC_PDM_AHB_CLK] = &gcc_pdm_ahb_clk.clkr,
-	[GCC_PDM_XO4_CLK] = &gcc_pdm_xo4_clk.clkr,
-	[GCC_PRNG_AHB_CLK] = &gcc_prng_ahb_clk.clkr,
-	[GCC_SDCC1_AHB_CLK] = &gcc_sdcc1_ahb_clk.clkr,
-	[GCC_SDCC1_APPS_CLK] = &gcc_sdcc1_apps_clk.clkr,
-	[GCC_SDCC2_AHB_CLK] = &gcc_sdcc2_ahb_clk.clkr,
-	[GCC_SDCC2_APPS_CLK] = &gcc_sdcc2_apps_clk.clkr,
-	[GCC_SDCC3_AHB_CLK] = &gcc_sdcc3_ahb_clk.clkr,
-	[GCC_SDCC3_APPS_CLK] = &gcc_sdcc3_apps_clk.clkr,
-	[GCC_USB2A_PHY_SLEEP_CLK] = &gcc_usb2a_phy_sleep_clk.clkr,
-	[GCC_USB_HS_AHB_CLK] = &gcc_usb_hs_ahb_clk.clkr,
-	[GCC_USB_HS_SYSTEM_CLK] = &gcc_usb_hs_system_clk.clkr,
-	[GCC_USB_HSIC_AHB_CLK] = &gcc_usb_hsic_ahb_clk.clkr,
-	[GCC_USB_HSIC_CLK] = &gcc_usb_hsic_clk.clkr,
-	[GCC_USB_HSIC_IO_CAL_CLK] = &gcc_usb_hsic_io_cal_clk.clkr,
-	[GCC_USB_HSIC_SYSTEM_CLK] = &gcc_usb_hsic_system_clk.clkr,
-};
-
-static const struct qcom_reset_map gcc_msm8226_resets[] = {
-	[GCC_USB_HS_HSIC_BCR] = { 0x0400 },
-	[GCC_USB_HS_BCR] = { 0x0480 },
-	[GCC_USB2A_PHY_BCR] = { 0x04a8 },
-};
-
-static struct gdsc *gcc_msm8226_gdscs[] = {
-	[USB_HS_HSIC_GDSC] = &usb_hs_hsic_gdsc,
-};
-
-static const struct regmap_config gcc_msm8226_regmap_config = {
-	.reg_bits	= 32,
-	.reg_stride	= 4,
-	.val_bits	= 32,
-	.max_register	= 0x1a80,
-	.fast_io	= true,
-};
-
-static const struct qcom_cc_desc gcc_msm8226_desc = {
-	.config = &gcc_msm8226_regmap_config,
-	.clks = gcc_msm8226_clocks,
-	.num_clks = ARRAY_SIZE(gcc_msm8226_clocks),
-	.resets = gcc_msm8226_resets,
-	.num_resets = ARRAY_SIZE(gcc_msm8226_resets),
-	.gdscs = gcc_msm8226_gdscs,
-	.num_gdscs = ARRAY_SIZE(gcc_msm8226_gdscs),
-};
-
 static struct clk_regmap *gcc_msm8974_clocks[] = {
 	[GPLL0] = &gpll0.clkr,
 	[GPLL0_VOTE] = &gpll0_vote,
@@ -2582,10 +2467,12 @@ static struct clk_regmap *gcc_msm8974_clocks[] = {
 	[GCC_USB_HSIC_IO_CAL_SLEEP_CLK] = &gcc_usb_hsic_io_cal_sleep_clk.clkr,
 	[GCC_USB_HSIC_SYSTEM_CLK] = &gcc_usb_hsic_system_clk.clkr,
 	[GCC_MMSS_GPLL0_CLK_SRC] = &gcc_mmss_gpll0_clk_src,
+
 	[GPLL4] = NULL,
 	[GPLL4_VOTE] = NULL,
 	[GCC_SDCC1_CDCCAL_SLEEP_CLK] = NULL,
 	[GCC_SDCC1_CDCCAL_FF_CLK] = NULL,
+	[GCC_PDM_XO4_CLK] = NULL,
 };
 
 static const struct qcom_reset_map gcc_msm8974_resets[] = {
@@ -2692,36 +2579,13 @@ static const struct qcom_cc_desc gcc_msm8974_desc = {
 };
 
 static const struct of_device_id gcc_msm8974_match_table[] = {
-	{ .compatible = "qcom,gcc-msm8226", .data = &gcc_msm8226_desc },
-	{ .compatible = "qcom,gcc-msm8974", .data = &gcc_msm8974_desc },
-	{ .compatible = "qcom,gcc-msm8974pro", .data = &gcc_msm8974_desc },
-	{ .compatible = "qcom,gcc-msm8974pro-ac", .data = &gcc_msm8974_desc },
+	{ .compatible = "qcom,gcc-msm8226" },
+	{ .compatible = "qcom,gcc-msm8974" },
+	{ .compatible = "qcom,gcc-msm8974pro" },
+	{ .compatible = "qcom,gcc-msm8974pro-ac" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gcc_msm8974_match_table);
-
-static void msm8226_clock_override(void)
-{
-	ce1_clk_src.freq_tbl = ftbl_gcc_ce1_clk_msm8226;
-	gp1_clk_src.freq_tbl = ftbl_gcc_gp_clk_msm8226;
-	gp2_clk_src.freq_tbl = ftbl_gcc_gp_clk_msm8226;
-	gp3_clk_src.freq_tbl = ftbl_gcc_gp_clk_msm8226;
-}
-
-static void msm8974_pro_clock_override(void)
-{
-	sdcc1_apps_clk_src_init.parent_data = gcc_xo_gpll0_gpll4;
-	sdcc1_apps_clk_src_init.num_parents = 3;
-	sdcc1_apps_clk_src.freq_tbl = ftbl_gcc_sdcc1_apps_clk_pro;
-	sdcc1_apps_clk_src.parent_map = gcc_xo_gpll0_gpll4_map;
-
-	gcc_msm8974_clocks[GPLL4] = &gpll4.clkr;
-	gcc_msm8974_clocks[GPLL4_VOTE] = &gpll4_vote;
-	gcc_msm8974_clocks[GCC_SDCC1_CDCCAL_SLEEP_CLK] =
-		&gcc_sdcc1_cdccal_sleep_clk.clkr;
-	gcc_msm8974_clocks[GCC_SDCC1_CDCCAL_FF_CLK] =
-		&gcc_sdcc1_cdccal_ff_clk.clkr;
-}
 
 static int gcc_msm8974_probe(struct platform_device *pdev)
 {
@@ -2733,11 +2597,87 @@ static int gcc_msm8974_probe(struct platform_device *pdev)
 	if (!id)
 		return -ENODEV;
 
-	if (!of_device_is_compatible(dev->of_node, "qcom,gcc-msm8974")) {
-		if (id->data == &gcc_msm8226_desc)
-			msm8226_clock_override();
-		else
-			msm8974_pro_clock_override();
+	if (of_device_is_compatible(pdev->dev.of_node, "qcom,gcc-msm8226")) {
+		/* MSM8226 features less clocks and some have different freq tables */
+		gcc_msm8974_desc.clks[USB30_MASTER_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP1_I2C_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP1_SPI_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP2_I2C_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP2_SPI_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP3_I2C_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP3_SPI_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP4_I2C_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP4_SPI_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP5_I2C_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP5_SPI_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP6_I2C_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_QUP6_SPI_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_UART1_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_UART2_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_UART3_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_UART4_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_UART5_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[BLSP2_UART6_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[CE2_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[SDCC4_APPS_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[TSIF_REF_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[USB30_MOCK_UTMI_CLK_SRC] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_AHB_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP1_I2C_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP1_SPI_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP2_I2C_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP2_SPI_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP3_I2C_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP3_SPI_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP4_I2C_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP4_SPI_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP5_I2C_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP5_SPI_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP6_I2C_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_QUP6_SPI_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_UART1_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_UART2_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_UART3_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_UART4_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_UART5_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_BLSP2_UART6_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_CE2_AHB_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_CE2_AXI_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_CE2_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_MMSS_NOC_CFG_AHB_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_OCMEM_NOC_CFG_AHB_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_SDCC4_AHB_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_SDCC4_APPS_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_SYS_NOC_USB3_AXI_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_TSIF_AHB_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_TSIF_REF_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_USB2B_PHY_SLEEP_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_USB30_MASTER_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_USB30_MOCK_UTMI_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_USB30_SLEEP_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_USB_HSIC_IO_CAL_SLEEP_CLK] = NULL;
+		gcc_msm8974_desc.clks[GCC_MMSS_GPLL0_CLK_SRC] = NULL;
+
+		gcc_msm8974_desc.clks[GCC_PDM_XO4_CLK] = &gcc_pdm_xo4_clk.clkr;
+
+		ce1_clk_src.freq_tbl = ftbl_gcc_ce1_clk_msm8226;
+		gp1_clk_src.freq_tbl = ftbl_gcc_gp_clk_msm8226;
+		gp2_clk_src.freq_tbl = ftbl_gcc_gp_clk_msm8226;
+		gp3_clk_src.freq_tbl = ftbl_gcc_gp_clk_msm8226;
+
+	} else if(!of_device_is_compatible(pdev->dev.of_node, "qcom,gcc-msm8974")) {
+		/* MSM8974pro and MSM8974pro-ac feature a few more clocks with changes in sdcc1 */
+		sdcc1_apps_clk_src_init.parent_data = gcc_xo_gpll0_gpll4;
+		sdcc1_apps_clk_src_init.num_parents = 3;
+		sdcc1_apps_clk_src.freq_tbl = ftbl_gcc_sdcc1_apps_clk_pro;
+		sdcc1_apps_clk_src.parent_map = gcc_xo_gpll0_gpll4_map;
+
+		gcc_msm8974_clocks[GPLL4] = &gpll4.clkr;
+		gcc_msm8974_clocks[GPLL4_VOTE] = &gpll4_vote;
+		gcc_msm8974_clocks[GCC_SDCC1_CDCCAL_SLEEP_CLK] =
+			&gcc_sdcc1_cdccal_sleep_clk.clkr;
+		gcc_msm8974_clocks[GCC_SDCC1_CDCCAL_FF_CLK] =
+			&gcc_sdcc1_cdccal_ff_clk.clkr;
 	}
 
 	ret = qcom_cc_register_board_clk(dev, "xo_board", "xo", 19200000);
