@@ -10,3 +10,7 @@
 	model = "Nokia Lumia 930";
 	compatible = "nokia,martini", "qcom,msm8974";
 };
+
+&mmcc {
+	status = "disabled";
+};
