@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2021, Leandro Friedrich <email@leandrofriedrich.de>
+ */
+
 /dts-v1/;
 #include "qcom-msm8974.dtsi"
 
