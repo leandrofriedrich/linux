@@ -5,7 +5,7 @@
 
 /dts-v1/;
 #include "qcom-msm8974.dtsi"
-
+#include "qcom-pm8941.dtsi"
 / {
 	model = "Nokia Lumia 930";
 	compatible = "nokia,martini", "qcom,msm8974";
@@ -13,4 +13,13 @@
 
 &mmcc {
 	status = "disabled";
+};
+
+&soc {
+	sdhci@f9824900 {
+		status = "ok";
+		bus-width = <8>;
+		non-removable;	
+		pinctrl-names = "default";
+	};
 };
