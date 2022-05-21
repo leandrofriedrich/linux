@@ -495,7 +495,6 @@ static int mtk_ecc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_ecc *ecc;
-	struct resource *res;
 	u32 max_eccdata_size;
 	int irq, ret;
 
@@ -513,8 +512,7 @@ static int mtk_ecc_probe(struct platform_device *pdev)
 	if (!ecc->eccdata)
 		return -ENOMEM;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	ecc->regs = devm_ioremap_resource(dev, res);
+	ecc->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(ecc->regs))
 		return PTR_ERR(ecc->regs);
 
@@ -581,7 +579,7 @@ static struct platform_driver mtk_ecc_driver = {
 	.probe  = mtk_ecc_probe,
 	.driver = {
 		.name  = "mtk-ecc",
-		.of_match_table = of_match_ptr(mtk_ecc_dt_match),
+		.of_match_table = mtk_ecc_dt_match,
 #ifdef CONFIG_PM_SLEEP
 		.pm = &mtk_ecc_pm_ops,
 #endif

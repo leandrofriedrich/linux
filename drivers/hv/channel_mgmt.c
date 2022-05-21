@@ -459,7 +459,7 @@ void hv_process_channel_removal(struct vmbus_channel *channel)
 	 * init_vp_index() can (re-)use the CPU.
 	 */
 	if (hv_is_perf_channel(channel))
-		hv_clear_alloced_cpu(channel->target_cpu);
+		hv_clear_allocated_cpu(channel->target_cpu);
 
 	/*
 	 * Upon suspend, an in-use hv_sock channel is marked as "rescinded" and
@@ -728,7 +728,7 @@ static void init_vp_index(struct vmbus_channel *channel)
 	bool perf_chn = hv_is_perf_channel(channel);
 	u32 i, ncpu = num_online_cpus();
 	cpumask_var_t available_mask;
-	struct cpumask *alloced_mask;
+	struct cpumask *allocated_mask;
 	u32 target_cpu;
 	int numa_node;
 
@@ -745,7 +745,7 @@ static void init_vp_index(struct vmbus_channel *channel)
 		 */
 		channel->target_cpu = VMBUS_CONNECT_CPU;
 		if (perf_chn)
-			hv_set_alloced_cpu(VMBUS_CONNECT_CPU);
+			hv_set_allocated_cpu(VMBUS_CONNECT_CPU);
 		return;
 	}
 
@@ -760,22 +760,21 @@ static void init_vp_index(struct vmbus_channel *channel)
 				continue;
 			break;
 		}
-		alloced_mask = &hv_context.hv_numa_map[numa_node];
+		allocated_mask = &hv_context.hv_numa_map[numa_node];
 
-		if (cpumask_weight(alloced_mask) ==
-		    cpumask_weight(cpumask_of_node(numa_node))) {
+		if (cpumask_equal(allocated_mask, cpumask_of_node(numa_node))) {
 			/*
 			 * We have cycled through all the CPUs in the node;
-			 * reset the alloced map.
+			 * reset the allocated map.
 			 */
-			cpumask_clear(alloced_mask);
+			cpumask_clear(allocated_mask);
 		}
 
-		cpumask_xor(available_mask, alloced_mask,
+		cpumask_xor(available_mask, allocated_mask,
 			    cpumask_of_node(numa_node));
 
 		target_cpu = cpumask_first(available_mask);
-		cpumask_set_cpu(target_cpu, alloced_mask);
+		cpumask_set_cpu(target_cpu, allocated_mask);
 
 		if (channel->offermsg.offer.sub_channel_index >= ncpu ||
 		    i > ncpu || !hv_cpuself_used(target_cpu, channel))
@@ -1554,7 +1553,7 @@ int vmbus_request_offers(void)
 	struct vmbus_channel_msginfo *msginfo;
 	int ret;
 
-	msginfo = kmalloc(sizeof(*msginfo) +
+	msginfo = kzalloc(sizeof(*msginfo) +
 			  sizeof(struct vmbus_channel_message_header),
 			  GFP_KERNEL);
 	if (!msginfo)
@@ -1581,46 +1580,12 @@ cleanup:
 	return ret;
 }
 
-static void invoke_sc_cb(struct vmbus_channel *primary_channel)
-{
-	struct list_head *cur, *tmp;
-	struct vmbus_channel *cur_channel;
-
-	if (primary_channel->sc_creation_callback == NULL)
-		return;
-
-	list_for_each_safe(cur, tmp, &primary_channel->sc_list) {
-		cur_channel = list_entry(cur, struct vmbus_channel, sc_list);
-
-		primary_channel->sc_creation_callback(cur_channel);
-	}
-}
-
 void vmbus_set_sc_create_callback(struct vmbus_channel *primary_channel,
 				void (*sc_cr_cb)(struct vmbus_channel *new_sc))
 {
 	primary_channel->sc_creation_callback = sc_cr_cb;
 }
 EXPORT_SYMBOL_GPL(vmbus_set_sc_create_callback);
-
-bool vmbus_are_subchannels_present(struct vmbus_channel *primary)
-{
-	bool ret;
-
-	ret = !list_empty(&primary->sc_list);
-
-	if (ret) {
-		/*
-		 * Invoke the callback on sub-channel creation.
-		 * This will present a uniform interface to the
-		 * clients.
-		 */
-		invoke_sc_cb(primary);
-	}
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(vmbus_are_subchannels_present);
 
 void vmbus_set_chn_rescind_callback(struct vmbus_channel *channel,
 		void (*chn_rescind_cb)(struct vmbus_channel *))

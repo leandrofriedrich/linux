@@ -128,15 +128,6 @@ Kernel Functions and Structures Reference
 .. kernel-doc:: include/linux/dma-buf.h
    :internal:
 
-Buffer Mapping Helpers
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. kernel-doc:: include/linux/dma-buf-map.h
-   :doc: overview
-
-.. kernel-doc:: include/linux/dma-buf-map.h
-   :internal:
-
 Reservation Objects
 -------------------
 
@@ -174,12 +165,6 @@ DMA Fences Functions Reference
    :export:
 
 .. kernel-doc:: include/linux/dma-fence.h
-   :internal:
-
-Seqno Hardware Fences
-~~~~~~~~~~~~~~~~~~~~~
-
-.. kernel-doc:: include/linux/seqno-fence.h
    :internal:
 
 DMA Fence Array

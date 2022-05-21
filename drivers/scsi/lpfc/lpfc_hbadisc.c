@@ -1,7 +1,7 @@
 /*******************************************************************
  * This file is part of the Emulex Linux Device Driver for         *
  * Fibre Channel Host Bus Adapters.                                *
- * Copyright (C) 2017-2021 Broadcom. All Rights Reserved. The term *
+ * Copyright (C) 2017-2022 Broadcom. All Rights Reserved. The term *
  * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.     *
  * Copyright (C) 2004-2016 Emulex.  All rights reserved.           *
  * EMULEX and SLI are trademarks of Emulex.                        *
@@ -209,7 +209,12 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 
 	spin_lock_irqsave(&ndlp->lock, iflags);
 	ndlp->nlp_flag |= NLP_IN_DEV_LOSS;
-	ndlp->nlp_flag &= ~NLP_NPR_2B_DISC;
+
+	/* If there is a PLOGI in progress, and we are in a
+	 * NLP_NPR_2B_DISC state, don't turn off the flag.
+	 */
+	if (ndlp->nlp_state != NLP_STE_PLOGI_ISSUE)
+		ndlp->nlp_flag &= ~NLP_NPR_2B_DISC;
 
 	/*
 	 * The backend does not expect any more calls associated with this
@@ -341,6 +346,37 @@ static void lpfc_check_inactive_vmid(struct lpfc_hba *phba)
 }
 
 /**
+ * lpfc_check_nlp_post_devloss - Check to restore ndlp refcnt after devloss
+ * @vport: Pointer to vport object.
+ * @ndlp: Pointer to remote node object.
+ *
+ * If NLP_IN_RECOV_POST_DEV_LOSS flag was set due to outstanding recovery of
+ * node during dev_loss_tmo processing, then this function restores the nlp_put
+ * kref decrement from lpfc_dev_loss_tmo_handler.
+ **/
+void
+lpfc_check_nlp_post_devloss(struct lpfc_vport *vport,
+			    struct lpfc_nodelist *ndlp)
+{
+	unsigned long iflags;
+
+	spin_lock_irqsave(&ndlp->lock, iflags);
+	if (ndlp->save_flags & NLP_IN_RECOV_POST_DEV_LOSS) {
+		ndlp->save_flags &= ~NLP_IN_RECOV_POST_DEV_LOSS;
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
+		lpfc_nlp_get(ndlp);
+		lpfc_printf_vlog(vport, KERN_INFO, LOG_DISCOVERY | LOG_NODE,
+				 "8438 Devloss timeout reversed on DID x%x "
+				 "refcnt %d ndlp %p flag x%x "
+				 "port_state = x%x\n",
+				 ndlp->nlp_DID, kref_read(&ndlp->kref), ndlp,
+				 ndlp->nlp_flag, vport->port_state);
+		spin_lock_irqsave(&ndlp->lock, iflags);
+	}
+	spin_unlock_irqrestore(&ndlp->lock, iflags);
+}
+
+/**
  * lpfc_dev_loss_tmo_handler - Remote node devloss timeout handler
  * @ndlp: Pointer to remote node object.
  *
@@ -358,6 +394,8 @@ lpfc_dev_loss_tmo_handler(struct lpfc_nodelist *ndlp)
 	uint8_t *name;
 	int warn_on = 0;
 	int fcf_inuse = 0;
+	bool recovering = false;
+	struct fc_vport *fc_vport = NULL;
 	unsigned long iflags;
 
 	vport = ndlp->vport;
@@ -394,6 +432,64 @@ lpfc_dev_loss_tmo_handler(struct lpfc_nodelist *ndlp)
 
 	/* Fabric nodes are done. */
 	if (ndlp->nlp_type & NLP_FABRIC) {
+		spin_lock_irqsave(&ndlp->lock, iflags);
+		/* In massive vport configuration settings, it's possible
+		 * dev_loss_tmo fired during node recovery.  So, check if
+		 * fabric nodes are in discovery states outstanding.
+		 */
+		switch (ndlp->nlp_DID) {
+		case Fabric_DID:
+			fc_vport = vport->fc_vport;
+			if (fc_vport &&
+			    fc_vport->vport_state == FC_VPORT_INITIALIZING)
+				recovering = true;
+			break;
+		case Fabric_Cntl_DID:
+			if (ndlp->nlp_flag & NLP_REG_LOGIN_SEND)
+				recovering = true;
+			break;
+		case FDMI_DID:
+			fallthrough;
+		case NameServer_DID:
+			if (ndlp->nlp_state >= NLP_STE_PLOGI_ISSUE &&
+			    ndlp->nlp_state <= NLP_STE_REG_LOGIN_ISSUE)
+				recovering = true;
+			break;
+		}
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
+
+		/* Mark an NLP_IN_RECOV_POST_DEV_LOSS flag to know if reversing
+		 * the following lpfc_nlp_put is necessary after fabric node is
+		 * recovered.
+		 */
+		if (recovering) {
+			lpfc_printf_vlog(vport, KERN_INFO,
+					 LOG_DISCOVERY | LOG_NODE,
+					 "8436 Devloss timeout marked on "
+					 "DID x%x refcnt %d ndlp %p "
+					 "flag x%x port_state = x%x\n",
+					 ndlp->nlp_DID, kref_read(&ndlp->kref),
+					 ndlp, ndlp->nlp_flag,
+					 vport->port_state);
+			spin_lock_irqsave(&ndlp->lock, iflags);
+			ndlp->save_flags |= NLP_IN_RECOV_POST_DEV_LOSS;
+			spin_unlock_irqrestore(&ndlp->lock, iflags);
+		} else if (ndlp->nlp_state == NLP_STE_UNMAPPED_NODE) {
+			/* Fabric node fully recovered before this dev_loss_tmo
+			 * queue work is processed.  Thus, ignore the
+			 * dev_loss_tmo event.
+			 */
+			lpfc_printf_vlog(vport, KERN_INFO,
+					 LOG_DISCOVERY | LOG_NODE,
+					 "8437 Devloss timeout ignored on "
+					 "DID x%x refcnt %d ndlp %p "
+					 "flag x%x port_state = x%x\n",
+					 ndlp->nlp_DID, kref_read(&ndlp->kref),
+					 ndlp, ndlp->nlp_flag,
+					 vport->port_state);
+			return fcf_inuse;
+		}
+
 		lpfc_nlp_put(ndlp);
 		return fcf_inuse;
 	}
@@ -421,6 +517,14 @@ lpfc_dev_loss_tmo_handler(struct lpfc_nodelist *ndlp)
 				 *(name+4), *(name+5), *(name+6), *(name+7),
 				 ndlp->nlp_DID, ndlp->nlp_flag,
 				 ndlp->nlp_state, ndlp->nlp_rpi);
+	}
+
+	/* If we are devloss, but we are in the process of rediscovering the
+	 * ndlp, don't issue a NLP_EVT_DEVICE_RM event.
+	 */
+	if (ndlp->nlp_state >= NLP_STE_PLOGI_ISSUE &&
+	    ndlp->nlp_state <= NLP_STE_PRLI_ISSUE) {
+		return fcf_inuse;
 	}
 
 	if (!(ndlp->fc4_xpt_flags & NVME_XPT_REGD))
@@ -765,9 +869,15 @@ lpfc_work_done(struct lpfc_hba *phba)
 	if (phba->pci_dev_grp == LPFC_PCI_DEV_OC)
 		lpfc_sli4_post_async_mbox(phba);
 
-	if (ha_copy & HA_ERATT)
+	if (ha_copy & HA_ERATT) {
 		/* Handle the error attention event */
 		lpfc_handle_eratt(phba);
+
+		if (phba->fw_dump_cmpl) {
+			complete(phba->fw_dump_cmpl);
+			phba->fw_dump_cmpl = NULL;
+		}
+	}
 
 	if (ha_copy & HA_MBATT)
 		lpfc_sli_handle_mb_event(phba);
@@ -966,8 +1076,20 @@ lpfc_cleanup_rpis(struct lpfc_vport *vport, int remove)
 	struct lpfc_nodelist *ndlp, *next_ndlp;
 
 	list_for_each_entry_safe(ndlp, next_ndlp, &vport->fc_nodes, nlp_listp) {
-		if (ndlp->nlp_state == NLP_STE_UNUSED_NODE)
+		if (ndlp->nlp_state == NLP_STE_UNUSED_NODE) {
+			/* It's possible the FLOGI to the fabric node never
+			 * successfully completed and never registered with the
+			 * transport.  In this case there is no way to clean up
+			 * the node.
+			 */
+			if (ndlp->nlp_DID == Fabric_DID) {
+				if (ndlp->nlp_prev_state ==
+				    NLP_STE_UNUSED_NODE &&
+				    !ndlp->fc4_xpt_flags)
+					lpfc_nlp_put(ndlp);
+			}
 			continue;
+		}
 
 		if ((phba->sli3_options & LPFC_SLI3_VPORT_TEARDOWN) ||
 		    ((vport->port_type == LPFC_NPIV_PORT) &&
@@ -3812,7 +3934,6 @@ lpfc_mbx_cmpl_unreg_vpi(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 	vport->vpi_state &= ~LPFC_VPI_REGISTERED;
 	vport->fc_flag |= FC_VPORT_NEEDS_REG_VPI;
 	spin_unlock_irq(shost->host_lock);
-	vport->unreg_vpi_cmpl = VPORT_OK;
 	mempool_free(pmb, phba->mbox_mem_pool);
 	lpfc_cleanup_vports_rrqs(vport, NULL);
 	/*
@@ -3842,7 +3963,6 @@ lpfc_mbx_unreg_vpi(struct lpfc_vport *vport)
 		lpfc_printf_vlog(vport, KERN_ERR, LOG_TRACE_EVENT,
 				 "1800 Could not issue unreg_vpi\n");
 		mempool_free(mbox, phba->mbox_mem_pool);
-		vport->unreg_vpi_cmpl = VPORT_ERROR;
 		return rc;
 	}
 	return 0;
@@ -4351,6 +4471,8 @@ lpfc_mbx_cmpl_fc_reg_login(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 		goto out;
 	}
 
+	lpfc_check_nlp_post_devloss(vport, ndlp);
+
 	if (phba->sli_rev < LPFC_SLI_REV4)
 		ndlp->nlp_rpi = mb->un.varWords[0];
 
@@ -4360,6 +4482,7 @@ lpfc_mbx_cmpl_fc_reg_login(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 			 ndlp->nlp_state);
 
 	ndlp->nlp_flag |= NLP_RPI_REGISTERED;
+	ndlp->nlp_flag &= ~NLP_REG_LOGIN_SEND;
 	ndlp->nlp_type |= NLP_FABRIC;
 	lpfc_nlp_set_state(vport, ndlp, NLP_STE_UNMAPPED_NODE);
 
@@ -4449,8 +4572,9 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 		fc_remote_port_rolechg(rport, rport_ids.roles);
 
 	lpfc_printf_vlog(ndlp->vport, KERN_INFO, LOG_NODE,
-			 "3183 %s rport x%px DID x%x, role x%x\n",
-			 __func__, rport, rport->port_id, rport->roles);
+			 "3183 %s rport x%px DID x%x, role x%x refcnt %d\n",
+			 __func__, rport, rport->port_id, rport->roles,
+			 kref_read(&ndlp->kref));
 
 	if ((rport->scsi_target_id != -1) &&
 	    (rport->scsi_target_id < LPFC_MAX_TARGET)) {
@@ -4475,8 +4599,9 @@ lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
 
 	lpfc_printf_vlog(vport, KERN_INFO, LOG_NODE,
 			 "3184 rport unregister x%06x, rport x%px "
-			 "xptflg x%x\n",
-			 ndlp->nlp_DID, rport, ndlp->fc4_xpt_flags);
+			 "xptflg x%x refcnt %d\n",
+			 ndlp->nlp_DID, rport, ndlp->fc4_xpt_flags,
+			 kref_read(&ndlp->kref));
 
 	fc_remote_port_delete(rport);
 	lpfc_nlp_put(ndlp);
@@ -4525,8 +4650,9 @@ lpfc_nlp_counters(struct lpfc_vport *vport, int state, int count)
 void
 lpfc_nlp_reg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 {
-
 	unsigned long iflags;
+
+	lpfc_check_nlp_post_devloss(vport, ndlp);
 
 	spin_lock_irqsave(&ndlp->lock, iflags);
 	if (ndlp->fc4_xpt_flags & NLP_XPT_REGD) {
@@ -4679,8 +4805,11 @@ lpfc_nlp_state_cleanup(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 	/* Reg/Unreg for FCP and NVME Transport interface */
 	if ((old_state == NLP_STE_MAPPED_NODE ||
 	     old_state == NLP_STE_UNMAPPED_NODE)) {
-		/* For nodes marked for ADISC, Handle unreg in ADISC cmpl */
-		if (!(ndlp->nlp_flag & NLP_NPR_ADISC))
+		/* For nodes marked for ADISC, Handle unreg in ADISC cmpl
+		 * if linkup. In linkdown do unreg_node
+		 */
+		if (!(ndlp->nlp_flag & NLP_NPR_ADISC) ||
+		    !lpfc_is_link_up(vport->phba))
 			lpfc_nlp_unreg_node(vport, ndlp);
 	}
 
@@ -4930,7 +5059,8 @@ lpfc_can_disctmo(struct lpfc_vport *vport)
 		vport->port_state, vport->fc_ns_retry, vport->fc_flag);
 
 	/* Turn off discovery timer if its running */
-	if (vport->fc_flag & FC_DISC_TMO) {
+	if (vport->fc_flag & FC_DISC_TMO ||
+	    timer_pending(&vport->fc_disctmo)) {
 		spin_lock_irqsave(shost->host_lock, iflags);
 		vport->fc_flag &= ~FC_DISC_TMO;
 		spin_unlock_irqrestore(shost->host_lock, iflags);
@@ -4959,20 +5089,26 @@ lpfc_check_sli_ndlp(struct lpfc_hba *phba,
 		    struct lpfc_iocbq *iocb,
 		    struct lpfc_nodelist *ndlp)
 {
-	IOCB_t *icmd = &iocb->iocb;
-	struct lpfc_vport    *vport = ndlp->vport;
+	struct lpfc_vport *vport = ndlp->vport;
+	u8 ulp_command;
+	u16 ulp_context;
+	u32 remote_id;
 
 	if (iocb->vport != vport)
 		return 0;
 
+	ulp_command = get_job_cmnd(phba, iocb);
+	ulp_context = get_job_ulpcontext(phba, iocb);
+	remote_id = get_job_els_rsp64_did(phba, iocb);
+
 	if (pring->ringno == LPFC_ELS_RING) {
-		switch (icmd->ulpCommand) {
+		switch (ulp_command) {
 		case CMD_GEN_REQUEST64_CR:
 			if (iocb->context_un.ndlp == ndlp)
 				return 1;
 			fallthrough;
 		case CMD_ELS_REQUEST64_CR:
-			if (icmd->un.elsreq64.remoteID == ndlp->nlp_DID)
+			if (remote_id == ndlp->nlp_DID)
 				return 1;
 			fallthrough;
 		case CMD_XMIT_ELS_RSP64_CX:
@@ -4985,9 +5121,8 @@ lpfc_check_sli_ndlp(struct lpfc_hba *phba,
 		    (ndlp->nlp_flag & NLP_DELAY_TMO)) {
 			return 0;
 		}
-		if (icmd->ulpContext == (volatile ushort)ndlp->nlp_rpi) {
+		if (ulp_context == ndlp->nlp_rpi)
 			return 1;
-		}
 	}
 	return 0;
 }
@@ -5233,6 +5368,7 @@ lpfc_unreg_rpi(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 
 			rc = lpfc_sli_issue_mbox(phba, mbox, MBX_NOWAIT);
 			if (rc == MBX_NOT_FINISHED) {
+				ndlp->nlp_flag &= ~NLP_UNREG_INP;
 				mempool_free(mbox, phba->mbox_mem_pool);
 				acc_plogi = 1;
 			}
@@ -5897,9 +6033,9 @@ static void
 lpfc_free_tx(struct lpfc_hba *phba, struct lpfc_nodelist *ndlp)
 {
 	LIST_HEAD(completions);
-	IOCB_t     *icmd;
 	struct lpfc_iocbq    *iocb, *next_iocb;
 	struct lpfc_sli_ring *pring;
+	u32 ulp_command;
 
 	pring = lpfc_phba_elsring(phba);
 	if (unlikely(!pring))
@@ -5910,12 +6046,13 @@ lpfc_free_tx(struct lpfc_hba *phba, struct lpfc_nodelist *ndlp)
 	 */
 	spin_lock_irq(&phba->hbalock);
 	list_for_each_entry_safe(iocb, next_iocb, &pring->txq, list) {
-		if (iocb->context1 != ndlp) {
+		if (iocb->context1 != ndlp)
 			continue;
-		}
-		icmd = &iocb->iocb;
-		if ((icmd->ulpCommand == CMD_ELS_REQUEST64_CR) ||
-		    (icmd->ulpCommand == CMD_XMIT_ELS_RSP64_CX)) {
+
+		ulp_command = get_job_cmnd(phba, iocb);
+
+		if (ulp_command == CMD_ELS_REQUEST64_CR ||
+		    ulp_command == CMD_XMIT_ELS_RSP64_CX) {
 
 			list_move_tail(&iocb->list, &completions);
 		}
@@ -5923,12 +6060,13 @@ lpfc_free_tx(struct lpfc_hba *phba, struct lpfc_nodelist *ndlp)
 
 	/* Next check the txcmplq */
 	list_for_each_entry_safe(iocb, next_iocb, &pring->txcmplq, list) {
-		if (iocb->context1 != ndlp) {
+		if (iocb->context1 != ndlp)
 			continue;
-		}
-		icmd = &iocb->iocb;
-		if (icmd->ulpCommand == CMD_ELS_REQUEST64_CR ||
-		    icmd->ulpCommand == CMD_XMIT_ELS_RSP64_CX) {
+
+		ulp_command = get_job_cmnd(phba, iocb);
+
+		if (ulp_command == CMD_ELS_REQUEST64_CR ||
+		    ulp_command == CMD_XMIT_ELS_RSP64_CX) {
 			lpfc_sli_issue_abort_iotag(phba, pring, iocb, NULL);
 		}
 	}

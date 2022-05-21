@@ -3,6 +3,7 @@
 
 #include "fw_reset.h"
 #include "diag/fw_tracer.h"
+#include "lib/tout.h"
 
 enum {
 	MLX5_FW_RESET_FLAGS_RESET_REQUESTED,
@@ -56,7 +57,8 @@ static int mlx5_reg_mfrl_set(struct mlx5_core_dev *dev, u8 reset_level,
 	return mlx5_core_access_reg(dev, in, sizeof(in), out, sizeof(out), MLX5_REG_MFRL, 0, 1);
 }
 
-static int mlx5_reg_mfrl_query(struct mlx5_core_dev *dev, u8 *reset_level, u8 *reset_type)
+static int mlx5_reg_mfrl_query(struct mlx5_core_dev *dev, u8 *reset_level,
+			       u8 *reset_type, u8 *reset_state)
 {
 	u32 out[MLX5_ST_SZ_DW(mfrl_reg)] = {};
 	u32 in[MLX5_ST_SZ_DW(mfrl_reg)] = {};
@@ -70,25 +72,67 @@ static int mlx5_reg_mfrl_query(struct mlx5_core_dev *dev, u8 *reset_level, u8 *r
 		*reset_level = MLX5_GET(mfrl_reg, out, reset_level);
 	if (reset_type)
 		*reset_type = MLX5_GET(mfrl_reg, out, reset_type);
+	if (reset_state)
+		*reset_state = MLX5_GET(mfrl_reg, out, reset_state);
 
 	return 0;
 }
 
 int mlx5_fw_reset_query(struct mlx5_core_dev *dev, u8 *reset_level, u8 *reset_type)
 {
-	return mlx5_reg_mfrl_query(dev, reset_level, reset_type);
+	return mlx5_reg_mfrl_query(dev, reset_level, reset_type, NULL);
 }
 
-int mlx5_fw_reset_set_reset_sync(struct mlx5_core_dev *dev, u8 reset_type_sel)
+static int mlx5_fw_reset_get_reset_state_err(struct mlx5_core_dev *dev,
+					     struct netlink_ext_ack *extack)
+{
+	u8 reset_state;
+
+	if (mlx5_reg_mfrl_query(dev, NULL, NULL, &reset_state))
+		goto out;
+
+	switch (reset_state) {
+	case MLX5_MFRL_REG_RESET_STATE_IN_NEGOTIATION:
+	case MLX5_MFRL_REG_RESET_STATE_RESET_IN_PROGRESS:
+		NL_SET_ERR_MSG_MOD(extack, "Sync reset was already triggered");
+		return -EBUSY;
+	case MLX5_MFRL_REG_RESET_STATE_TIMEOUT:
+		NL_SET_ERR_MSG_MOD(extack, "Sync reset got timeout");
+		return -ETIMEDOUT;
+	case MLX5_MFRL_REG_RESET_STATE_NACK:
+		NL_SET_ERR_MSG_MOD(extack, "One of the hosts disabled reset");
+		return -EPERM;
+	}
+
+out:
+	NL_SET_ERR_MSG_MOD(extack, "Sync reset failed");
+	return -EIO;
+}
+
+int mlx5_fw_reset_set_reset_sync(struct mlx5_core_dev *dev, u8 reset_type_sel,
+				 struct netlink_ext_ack *extack)
 {
 	struct mlx5_fw_reset *fw_reset = dev->priv.fw_reset;
+	u32 out[MLX5_ST_SZ_DW(mfrl_reg)] = {};
+	u32 in[MLX5_ST_SZ_DW(mfrl_reg)] = {};
 	int err;
 
 	set_bit(MLX5_FW_RESET_FLAGS_PENDING_COMP, &fw_reset->reset_flags);
-	err = mlx5_reg_mfrl_set(dev, MLX5_MFRL_REG_RESET_LEVEL3, reset_type_sel, 0, true);
-	if (err)
-		clear_bit(MLX5_FW_RESET_FLAGS_PENDING_COMP, &fw_reset->reset_flags);
-	return err;
+
+	MLX5_SET(mfrl_reg, in, reset_level, MLX5_MFRL_REG_RESET_LEVEL3);
+	MLX5_SET(mfrl_reg, in, rst_type_sel, reset_type_sel);
+	MLX5_SET(mfrl_reg, in, pci_sync_for_fw_update_start, 1);
+	err = mlx5_access_reg(dev, in, sizeof(in), out, sizeof(out),
+			      MLX5_REG_MFRL, 0, 1, false);
+	if (!err)
+		return 0;
+
+	clear_bit(MLX5_FW_RESET_FLAGS_PENDING_COMP, &fw_reset->reset_flags);
+	if (err == -EREMOTEIO && MLX5_CAP_MCAM_FEATURE(dev, reset_state))
+		return mlx5_fw_reset_get_reset_state_err(dev, extack);
+
+	NL_SET_ERR_MSG_MOD(extack, "Sync reset command failed");
+	return mlx5_cmd_check(dev, err, in, out);
 }
 
 int mlx5_fw_reset_set_live_patch(struct mlx5_core_dev *dev)
@@ -131,7 +175,7 @@ static void mlx5_stop_sync_reset_poll(struct mlx5_core_dev *dev)
 {
 	struct mlx5_fw_reset *fw_reset = dev->priv.fw_reset;
 
-	del_timer(&fw_reset->timer);
+	del_timer_sync(&fw_reset->timer);
 }
 
 static void mlx5_sync_reset_clear_reset_requested(struct mlx5_core_dev *dev, bool poll_health)
@@ -228,8 +272,6 @@ static void mlx5_sync_reset_request_event(struct work_struct *work)
 		mlx5_core_warn(dev, "PCI Sync FW Update Reset Ack. Device reset is expected.\n");
 }
 
-#define MLX5_PCI_LINK_UP_TIMEOUT 2000
-
 static int mlx5_pci_link_toggle(struct mlx5_core_dev *dev)
 {
 	struct pci_bus *bridge_bus = dev->pdev->bus;
@@ -286,7 +328,7 @@ static int mlx5_pci_link_toggle(struct mlx5_core_dev *dev)
 		goto restore;
 	}
 
-	timeout = jiffies + msecs_to_jiffies(MLX5_PCI_LINK_UP_TIMEOUT);
+	timeout = jiffies + msecs_to_jiffies(mlx5_tout_ms(dev, PCI_TOGGLE));
 	do {
 		err = pci_read_config_word(bridge, cap + PCI_EXP_LNKSTA, &reg16);
 		if (err)
@@ -299,8 +341,8 @@ static int mlx5_pci_link_toggle(struct mlx5_core_dev *dev)
 	if (reg16 & PCI_EXP_LNKSTA_DLLLA) {
 		mlx5_core_info(dev, "PCI Link up\n");
 	} else {
-		mlx5_core_err(dev, "PCI link not ready (0x%04x) after %d ms\n",
-			      reg16, MLX5_PCI_LINK_UP_TIMEOUT);
+		mlx5_core_err(dev, "PCI link not ready (0x%04x) after %llu ms\n",
+			      reg16, mlx5_tout_ms(dev, PCI_TOGGLE));
 		err = -ETIMEDOUT;
 	}
 
@@ -395,16 +437,16 @@ static int fw_reset_event_notifier(struct notifier_block *nb, unsigned long acti
 	return NOTIFY_OK;
 }
 
-#define MLX5_FW_RESET_TIMEOUT_MSEC 5000
 int mlx5_fw_reset_wait_reset_done(struct mlx5_core_dev *dev)
 {
-	unsigned long timeout = msecs_to_jiffies(MLX5_FW_RESET_TIMEOUT_MSEC);
+	unsigned long pci_sync_update_timeout = mlx5_tout_ms(dev, PCI_SYNC_UPDATE);
+	unsigned long timeout = msecs_to_jiffies(pci_sync_update_timeout);
 	struct mlx5_fw_reset *fw_reset = dev->priv.fw_reset;
 	int err;
 
 	if (!wait_for_completion_timeout(&fw_reset->done, timeout)) {
-		mlx5_core_warn(dev, "FW sync reset timeout after %d seconds\n",
-			       MLX5_FW_RESET_TIMEOUT_MSEC / 1000);
+		mlx5_core_warn(dev, "FW sync reset timeout after %lu seconds\n",
+			       pci_sync_update_timeout / 1000);
 		err = -ETIMEDOUT;
 		goto out;
 	}

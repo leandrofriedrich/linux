@@ -83,6 +83,31 @@ static int symbol_by_offset(const void *key, const struct rb_node *node)
 	return 0;
 }
 
+struct symbol_hole {
+	unsigned long key;
+	const struct symbol *sym;
+};
+
+/*
+ * Find !section symbol where @offset is after it.
+ */
+static int symbol_hole_by_offset(const void *key, const struct rb_node *node)
+{
+	const struct symbol *s = rb_entry(node, struct symbol, node);
+	struct symbol_hole *sh = (void *)key;
+
+	if (sh->key < s->offset)
+		return -1;
+
+	if (sh->key >= s->offset + s->len) {
+		if (s->type != STT_SECTION)
+			sh->sym = s;
+		return 1;
+	}
+
+	return 0;
+}
+
 struct section *find_section_by_name(const struct elf *elf, const char *name)
 {
 	struct section *sec;
@@ -160,6 +185,41 @@ struct symbol *find_symbol_containing(const struct section *sec, unsigned long o
 	}
 
 	return NULL;
+}
+
+/*
+ * Returns size of hole starting at @offset.
+ */
+int find_symbol_hole_containing(const struct section *sec, unsigned long offset)
+{
+	struct symbol_hole hole = {
+		.key = offset,
+		.sym = NULL,
+	};
+	struct rb_node *n;
+	struct symbol *s;
+
+	/*
+	 * Find the rightmost symbol for which @offset is after it.
+	 */
+	n = rb_find(&hole, &sec->symbol_tree, symbol_hole_by_offset);
+
+	/* found a symbol that contains @offset */
+	if (n)
+		return 0; /* not a hole */
+
+	/* didn't find a symbol for which @offset is after it */
+	if (!hole.sym)
+		return 0; /* not a hole */
+
+	/* @offset >= sym->offset + sym->len, find symbol after it */
+	n = rb_next(&hole.sym->node);
+	if (!n)
+		return -1; /* until end of address space */
+
+	/* hole until start of next symbol */
+	s = rb_entry(n, struct symbol, node);
+	return s->offset - offset;
 }
 
 struct symbol *find_func_containing(struct section *sec, unsigned long offset)
@@ -375,6 +435,7 @@ static int read_symbols(struct elf *elf)
 			return -1;
 		}
 		memset(sym, 0, sizeof(*sym));
+		INIT_LIST_HEAD(&sym->pv_target);
 		sym->alias = sym;
 
 		sym->idx = i;
@@ -741,90 +802,6 @@ static int elf_add_string(struct elf *elf, struct section *strtab, char *str)
 	return len;
 }
 
-struct symbol *elf_create_undef_symbol(struct elf *elf, const char *name)
-{
-	struct section *symtab, *symtab_shndx;
-	struct symbol *sym;
-	Elf_Data *data;
-	Elf_Scn *s;
-
-	sym = malloc(sizeof(*sym));
-	if (!sym) {
-		perror("malloc");
-		return NULL;
-	}
-	memset(sym, 0, sizeof(*sym));
-
-	sym->name = strdup(name);
-
-	sym->sym.st_name = elf_add_string(elf, NULL, sym->name);
-	if (sym->sym.st_name == -1)
-		return NULL;
-
-	sym->sym.st_info = GELF_ST_INFO(STB_GLOBAL, STT_NOTYPE);
-	// st_other 0
-	// st_shndx 0
-	// st_value 0
-	// st_size 0
-
-	symtab = find_section_by_name(elf, ".symtab");
-	if (!symtab) {
-		WARN("can't find .symtab");
-		return NULL;
-	}
-
-	s = elf_getscn(elf->elf, symtab->idx);
-	if (!s) {
-		WARN_ELF("elf_getscn");
-		return NULL;
-	}
-
-	data = elf_newdata(s);
-	if (!data) {
-		WARN_ELF("elf_newdata");
-		return NULL;
-	}
-
-	data->d_buf = &sym->sym;
-	data->d_size = sizeof(sym->sym);
-	data->d_align = 1;
-	data->d_type = ELF_T_SYM;
-
-	sym->idx = symtab->sh.sh_size / sizeof(sym->sym);
-
-	symtab->sh.sh_size += data->d_size;
-	symtab->changed = true;
-
-	symtab_shndx = find_section_by_name(elf, ".symtab_shndx");
-	if (symtab_shndx) {
-		s = elf_getscn(elf->elf, symtab_shndx->idx);
-		if (!s) {
-			WARN_ELF("elf_getscn");
-			return NULL;
-		}
-
-		data = elf_newdata(s);
-		if (!data) {
-			WARN_ELF("elf_newdata");
-			return NULL;
-		}
-
-		data->d_buf = &sym->sym.st_size; /* conveniently 0 */
-		data->d_size = sizeof(Elf32_Word);
-		data->d_align = 4;
-		data->d_type = ELF_T_WORD;
-
-		symtab_shndx->sh.sh_size += 4;
-		symtab_shndx->changed = true;
-	}
-
-	sym->sec = find_section_by_index(elf, 0);
-
-	elf_add_symbol(elf, sym);
-
-	return sym;
-}
-
 struct section *elf_create_section(struct elf *elf, const char *name,
 				   unsigned int sh_flags, size_t entsize, int nr)
 {
@@ -1101,6 +1078,9 @@ int elf_write(struct elf *elf)
 {
 	struct section *sec;
 	Elf_Scn *s;
+
+	if (dryrun)
+		return 0;
 
 	/* Update changed relocation sections and section headers: */
 	list_for_each_entry(sec, &elf->sections, list) {
